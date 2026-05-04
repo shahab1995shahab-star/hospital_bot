@@ -10,10 +10,8 @@ import threading
 TELEGRAM_TOKEN = "8743390722:AAHBb9LVRJHUmccEK-xGcc32YQw5rE_KAnY"
 GEMINI_API_KEY = "AIzaSyCWDo3VlPLsTPs5b4zKNzHAmdSC8U29Rsw"  # 🔑 حط مفتاحك هنا
 
-# ========== تشغيل Gemini ==========
-genai.configure(api_key=GEMINI_API_KEY)
-
-model = genai.GenerativeModel('gemini-1.5-flash')
+# ========== تشغيل Gemini (الطريقة الجديدة) ==========
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ========== الأيقونات ==========
 I = {
@@ -30,7 +28,7 @@ HOSPITAL = {
     "complaints": "779157779",
 }
 
-# ========== دالة التحليل الطبي الذكي ==========
+# ========== دالة التحليل الطبي الذكي (الطريقة الجديدة) ==========
 async def medical_analysis(symptoms):
     try:
         prompt = f"""أنت استشاري طبي في {HOSPITAL['name']}.
@@ -58,9 +56,13 @@ async def medical_analysis(symptoms):
 
 📞 للطوارئ: {HOSPITAL['phone']}"""
         
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=prompt
+        )
         return response.text if response else None
     except Exception as e:
+        print(f"خطأ: {e}")
         return None
 
 # ========== دوال البوت ==========
@@ -130,8 +132,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif msg == f"{I['loc']} الموقع":
         await location(update, context)
     else:
-        # استشارة طبية
-        thinking = await update.message.reply_text(f"{I['brain']} جاري تحليل الأعراض和治疗...")
+        thinking = await update.message.reply_text(f"{I['brain']} جاري تحليل الأعراض...")
         
         response = await medical_analysis(msg)
         
