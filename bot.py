@@ -7,7 +7,7 @@ from flask import Flask, request, jsonify
 import threading
 
 # ========== التوكنات والمفاتيح ==========
-TELEGRAM_TOKEN = "8743390722:AAGpvVZdhdJrGEksOCZvVlUPVogwpxXEIIY"
+TELEGRAM_TOKEN = "8743390722:AAFT-L67uXzkipfd-C29-GOBGTHPolHFyX8"
 GEMINI_API_KEY = "AIzaSyCWDo3VlPLsTPs5b4zKNzHAmdSC8U29Rsw"
 
 # ========== تشغيل Gemini ==========
