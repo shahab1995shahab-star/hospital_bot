@@ -8,7 +8,7 @@ import threading
 
 # ========== التوكنات والمفاتيح ==========
 TELEGRAM_TOKEN = "8743390722:AAHLDi36JpRC5AJabXPTA6yzERK6MdVTo6c"
-GEMINI_API_KEY = "ضع_مفتاح_Gemini_هنا"  # 🔑 حط المفتاح اللي حفظته
+GEMINI_API_KEY = "AIzaSyCWDo3VlPLsTPs5b4zKNzHAmdSC8U29Rsw"  # 🔑 حط مفتاحك هنا
 
 # ========== تشغيل Gemini ==========
 genai.configure(api_key=GEMINI_API_KEY)
