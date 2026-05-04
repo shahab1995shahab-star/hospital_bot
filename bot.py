@@ -8,9 +8,9 @@ import threading
 
 # ========== التوكنات والمفاتيح ==========
 TELEGRAM_TOKEN = "8743390722:AAHBb9LVRJHUmccEK-xGcc32YQw5rE_KAnY"
-GEMINI_API_KEY = "AIzaSyCWDo3VlPLsTPs5b4zKNzHAmdSC8U29Rsw"  # 🔑 حط مفتاحك هنا
+GEMINI_API_KEY = "AIzaSyCWDo3VlPLsTPs5b4zKNzHAmdSC8U29Rsw"
 
-# ========== تشغيل Gemini (الطريقة الجديدة) ==========
+# ========== تشغيل Gemini ==========
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ========== الأيقونات ==========
@@ -28,7 +28,7 @@ HOSPITAL = {
     "complaints": "779157779",
 }
 
-# ========== دالة التحليل الطبي الذكي (الطريقة الجديدة) ==========
+# ========== دالة التحليل الطبي الذكي ==========
 async def medical_analysis(symptoms):
     try:
         prompt = f"""أنت استشاري طبي في {HOSPITAL['name']}.
@@ -40,10 +40,11 @@ async def medical_analysis(symptoms):
 {I['steth']} *الاستشارة الطبية*
 
 {I['brain']} *تحليل الأعراض:*
-[تحليل دقيق]
+[اكتب تحليلاً دقيقاً للأعراض هنا]
 
 {I['diagnosis']} *التشخيص المبدئي:*
-[احتمالان أو ثلاثة]
+• [الاحتمال الأول]
+• [الاحتمال الثاني]
 
 {I['treatment']} *العلاج والنصائح:*
 • [نصيحة 1]
@@ -56,13 +57,14 @@ async def medical_analysis(symptoms):
 
 📞 للطوارئ: {HOSPITAL['phone']}"""
         
+        # استخدم نموذج صحيح موجود
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-1.5-flash",  # ✅ هذا النموذج موجود ومجاني
             contents=prompt
         )
         return response.text if response else None
     except Exception as e:
-        print(f"خطأ: {e}")
+        print(f"خطأ في Gemini: {e}")
         return None
 
 # ========== دوال البوت ==========
@@ -96,7 +98,7 @@ async def hospital_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def emergency(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"{I['emerg']} *حالة طارئة* {I['emerg']}\n\n"
+        f"{I['emerg']} *حالة طارئه* {I['emerg']}\n\n"
         f"اتصل فوراً:\n"
         f"📞 {HOSPITAL['phone']}\n"
         f"📍 {HOSPITAL['address']}\n\n"
@@ -146,26 +148,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ========== إعداد Flask ==========
 app = Flask(__name__)
-telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+telegram_app = None
+
+def setup_bot():
+    global telegram_app
+    telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
+    telegram_app.add_handler(CommandHandler("start", start))
+    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    return telegram_app
 
 @app.route('/')
 def home():
     return jsonify({"status": "✅ البوت الطبي الذكي شغال", "bot": "@Hospitalalg_bot"})
 
-@app.route('/webhook', methods=['POST'])
-async def webhook():
-    update_data = request.get_json()
-    if update_data:
-        update = Update.de_json(update_data, telegram_app.bot)
-        await telegram_app.process_update(update)
-    return jsonify({"status": "ok"}), 200
-
-def run_flask():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+def run_polling():
+    """تشغيل البوت في thread منفصل"""
+    app_bot = setup_bot()
+    print("✅ البوت الطبي الذكي شغال...")
+    app_bot.run_polling()
 
 if __name__ == '__main__':
-    threading.Thread(target=run_flask).start()
-    print("✅ البوت الطبي الذكي شغال...")
-    telegram_app.run_polling()
+    # تشغيل البوت في thread منفصل
+    bot_thread = threading.Thread(target=run_polling)
+    bot_thread.start()
+    
+    # تشغيل Flask
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
