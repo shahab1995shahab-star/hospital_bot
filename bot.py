@@ -3,7 +3,7 @@ import logging
 from flask import Flask, request, jsonify
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
+from google import genai
 import asyncio
 
 # ========== إعدادات التسجيل ==========
@@ -14,9 +14,8 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = "8743390722:AAFT-L67uXzkipfd-C29-GOBGTHPolHFyX8"
 GEMINI_API_KEY = "AIzaSyCWDo3VlPLsTPs5b4zKNzHAmdSC8U29Rsw"
 
-# ========== تشغيل Gemini ==========
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+# ========== تشغيل Gemini بالطريقة الجديدة ==========
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ========== الأيقونات ==========
 I = {
@@ -63,7 +62,7 @@ DOCTORS = {
     "رئيس قسم الباطنية": "د/عبد الواسع مجاهد",
 }
 
-# ========== دالة التحليل الطبي الذكي ==========
+# ========== دالة التحليل الطبي الذكي (بالطريقة الجديدة) ==========
 async def medical_analysis(symptoms):
     """تحليل الأعراض وتقديم استشارة طبية"""
     try:
@@ -91,13 +90,17 @@ async def medical_analysis(symptoms):
 
 📞 للطوارئ: {HOSPITAL['phone']}"""
         
-        response = model.generate_content(prompt)
+        # استخدام الطريقة الجديدة
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
         return response.text if response else None
     except Exception as e:
         logger.error(f"خطأ في Gemini: {e}")
         return None
 
-# ========== دوال البوت ==========
+# ========== دوال البوت (نفسها بدون تغيير) ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [KeyboardButton(f"{I['steth']} استشارة طبية")],
@@ -177,7 +180,6 @@ async def consultation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def media_center(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """المركز الإعلامي - روابط التواصل الاجتماعي"""
     text = f"""{I['media']} *المركز الإعلامي - هيئة المستشفى الجمهوري التعليمي* {I['media']}
 
 تابعونا على جميع وسائل التواصل الاجتماعي:
@@ -205,7 +207,6 @@ async def media_center(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
 
 async def whatsapp_direct(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """واتساب مباشر"""
     text = f"""{I['whatsapp']} *تواصل مباشر عبر الواتساب* {I['whatsapp']}
 
 اضغط على الرابط أدناه للتواصل المباشر مع فريق المستشفى عبر الواتساب:
@@ -253,17 +254,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await thinking.edit_text(response, parse_mode="Markdown")
         else:
             await thinking.edit_text(
-                f"{I['warning']} *عذراً، حدث خطأ تقني*\n\n"
+                f"{I['warning']} *عذراً، خدمة الذكاء الاصطناعي غير متاحة حالياً*\n\n"
                 f"الرجاء المحاولة مرة أخرى أو الاتصال على:\n"
                 f"📞 {HOSPITAL['phone']}\n\n"
-                f"أعد كتابة الأعراض بشكل أوضح",
+                f"يمكنك استخدام الأزرار الأخرى للحصول على المعلومات",
                 parse_mode="Markdown"
             )
 
 # ========== إعداد Flask و Webhook ==========
 app = Flask(__name__)
 
-# إنشاء وتطبيق البوت (تهيئة صحيحة)
+# إنشاء تطبيق Telegram
 telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # إضافة المعالجات
@@ -285,7 +286,6 @@ async def webhook():
     try:
         update_data = request.get_json()
         if update_data:
-            # تهيئة التطبيق لكل طلب
             async with telegram_app:
                 update = Update.de_json(update_data, telegram_app.bot)
                 await telegram_app.process_update(update)
@@ -303,11 +303,8 @@ def run_webhook_mode():
     """تشغيل وضع Webhook"""
     port = int(os.environ.get("PORT", 8080))
     
-    # تعيين webhook
-    webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'hospital-bot-5ctc.onrender.com')}/webhook"
-    
     logger.info(f"🚀 تشغيل البوت الطبي الذكي...")
-    logger.info(f"📍 Webhook URL: {webhook_url}")
+    logger.info(f"📍 Port: {port}")
     
     # تشغيل Flask
     app.run(host="0.0.0.0", port=port)
