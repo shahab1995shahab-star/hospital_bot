@@ -1,7 +1,7 @@
 import os
 import logging
 from flask import Flask, request, jsonify
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import google.generativeai as genai
 import asyncio
@@ -9,7 +9,6 @@ import asyncio
 # ========== إعدادات التسجيل ==========
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 # ========== التوكنات والمفاتيح ==========
 TELEGRAM_TOKEN = "8743390722:AAFT-L67uXzkipfd-C29-GOBGTHPolHFyX8"
@@ -264,7 +263,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ========== إعداد Flask و Webhook ==========
 app = Flask(__name__)
 
-# إنشاء تطبيق Telegram
+# إنشاء وتطبيق البوت (تهيئة صحيحة)
 telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # إضافة المعالجات
@@ -286,8 +285,10 @@ async def webhook():
     try:
         update_data = request.get_json()
         if update_data:
-            update = Update.de_json(update_data, telegram_app.bot)
-            await telegram_app.process_update(update)
+            # تهيئة التطبيق لكل طلب
+            async with telegram_app:
+                update = Update.de_json(update_data, telegram_app.bot)
+                await telegram_app.process_update(update)
         return jsonify({"status": "ok"}), 200
     except Exception as e:
         logger.error(f"خطأ في webhook: {e}")
@@ -298,13 +299,18 @@ def health():
     return jsonify({"status": "healthy"}), 200
 
 # ========== التشغيل ==========
-if __name__ == '__main__':
+def run_webhook_mode():
+    """تشغيل وضع Webhook"""
+    port = int(os.environ.get("PORT", 8080))
+    
     # تعيين webhook
-    webhook_url = "https://hospital-bot.onrender.com/webhook"
+    webhook_url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'hospital-bot-5ctc.onrender.com')}/webhook"
     
     logger.info(f"🚀 تشغيل البوت الطبي الذكي...")
     logger.info(f"📍 Webhook URL: {webhook_url}")
     
     # تشغيل Flask
-    port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
+
+if __name__ == '__main__':
+    run_webhook_mode()
