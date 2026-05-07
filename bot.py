@@ -2,7 +2,7 @@ import os
 import logging
 from flask import Flask, request, jsonify
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from google import genai
 import asyncio
 
@@ -75,6 +75,56 @@ FAQ = {
     
     "هل توجد عيادات خارجية؟": f"{I['clock']} *العيادات الخارجية*\n\nنعم، يوجد قسم خاص بالعيادات الخارجية بإدارة مختصة لتقديم الخدمات اليومية للمرضى.\n\n🕐 أوقات العمل: السبت - الأربعاء (8ص - 2م)"
 }
+
+# ========== دالة التحليل الطبي باستخدام Gemini (بأحدث نموذج) ==========
+async def medical_analysis(symptoms):
+    """تحليل الأعراض باستخدام Gemini AI"""
+    try:
+        prompt = f"""أنت استشاري طبي متخصص في {HOSPITAL['name']}.
+
+الأعراض التي يشكو منها المريض: {symptoms}
+
+قم بتحليل هذه الأعراض وتقديم استشارة طبية أولية بهذا التنسيق بالضبط:
+
+🩺 *الاستشارة الطبية*
+
+🧠 *تحليل الأعراض:*
+[اكتب تحليلاً دقيقاً وواضحاً للأعراض المذكورة]
+
+🔬 *التشخيص المبدئي (احتمالات):*
+• [الاحتمال الأول]
+• [الاحتمال الثاني]
+
+💊 *العلاج والنصائح الأولية:*
+• [نصيحة عملية 1]
+• [نصيحة عملية 2]
+
+🏥 *القسم الطبي المناسب للمراجعة:*
+[اسم القسم المناسب]
+
+⚠️ *هذا تشخيص أولي وليس بديلاً عن استشارة الطبيب المختص*
+
+📞 للطوارئ: {HOSPITAL['phone']}
+📍 {HOSPITAL['address']}"""
+
+        # استخدام أحدث نموذج متاح
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",  # أحدث نموذج
+            contents=prompt
+        )
+        return response.text if response else None
+    except Exception as e:
+        logger.error(f"خطأ في Gemini: {e}")
+        # محاولة استخدام نموذج آخر
+        try:
+            response = client.models.generate_content(
+                model="gemini-1.5-pro",  # نموذج بديل
+                contents=prompt
+            )
+            return response.text if response else None
+        except Exception as e2:
+            logger.error(f"خطأ في Gemini (نموذج بديل): {e2}")
+            return None
 
 # ========== دوال البوت ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -296,7 +346,7 @@ async def faq_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(
         f"{I['answer']} *{question}*\n\n{answer}\n\n"
-        f"{I['info']} للعودة إلى الأسئلة الشائعة، استخدم الأمر /faq",
+        f"{I['info']} للعودة إلى الأسئلة الشائعة، استخدم الأمر /start",
         parse_mode="Markdown"
     )
 
@@ -367,47 +417,6 @@ async def whatsapp_direct(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     await update.message.reply_text(text, parse_mode="Markdown")
 
-async def medical_analysis(symptoms):
-    """تحليل الأعراض باستخدام Gemini AI"""
-    try:
-        prompt = f"""أنت استشاري طبي متخصص في {HOSPITAL['name']}.
-
-الأعراض التي يشكو منها المريض: {symptoms}
-
-قم بتحليل هذه الأعراض وتقديم استشارة طبية أولية بهذا التنسيق بالضبط:
-
-🩺 *الاستشارة الطبية*
-
-🧠 *تحليل الأعراض:*
-[اكتب تحليلاً دقيقاً وواضحاً للأعراض المذكورة]
-
-🔬 *التشخيص المبدئي (احتمالات):*
-• [الاحتمال الأول]
-• [الاحتمال الثاني]
-
-💊 *العلاج والنصائح الأولية:*
-• [نصيحة عملية 1]
-• [نصيحة عملية 2]
-
-🏥 *القسم الطبي المناسب للمراجعة:*
-[اسم القسم من الأقسام التالية: الجراحة العامة، العظام، الباطنية، الأطفال، الأنف والأذن والحنجرة، الجلدية، المسالك البولية، العيون، الطوارئ]
-
-⚠️ *هذا تشخيص أولي وليس بديلاً عن استشارة الطبيب المختص*
-
-📞 للطوارئ: {HOSPITAL['phone']}
-📍 {HOSPITAL['address']}
-
-ملاحظة: كن دقيقاً ومهنياً، استخدم اللغة العربية الفصحى المبسطة."""
-        
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt
-        )
-        return response.text if response else None
-    except Exception as e:
-        logger.error(f"خطأ في Gemini: {e}")
-        return None
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة الرسائل النصية"""
     msg = update.message.text
@@ -450,9 +459,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await thinking.edit_text(
                 f"{I['warning']} *عذراً، حدث خطأ في خدمة الذكاء الاصطناعي*\n\n"
-                f"الرجاء المحاولة مرة أخرى أو استخدام الأزرار للحصول على المعلومات.\n\n"
+                f"يمكنك استخدام الأزرار للحصول على المعلومات المباشرة.\n\n"
                 f"📞 *للاستفسار المباشر:* {HOSPITAL['phone']}\n\n"
-                f"💡 *نصيحة:* حاول كتابة الأعراض بشكل أوضح مع التفاصيل (المكان، المدة، الشدة)",
+                f"💡 *نصيحة:* حاول كتابة الأعراض بشكل أوضح مع التفاصيل (المكان، المدة، الشدة)\n\n"
+                f"أو اضغط على زر *{I['stethoscope']} استشارة طبية* واتبع التعليمات",
                 parse_mode="Markdown"
             )
 
@@ -464,7 +474,6 @@ telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # إضافة المعالجات
 telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("faq", faq_list))
 telegram_app.add_handler(CallbackQueryHandler(faq_callback, pattern="^faq_"))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
@@ -475,7 +484,7 @@ def home():
         "bot": "@Hospitalalg_bot",
         "name": "هيئة المستشفى الجمهوري التعليمي",
         "version": "Golden Edition v2.0",
-        "ai": "Gemini 1.5 Flash",
+        "ai": "Gemini 2.0 Flash Exp",
         "features": ["استشارات طبية", "أسئلة شائعة", "معلومات المستشفى", "الكوادر الطبية", "المركز الإعلامي"]
     })
 
@@ -504,7 +513,7 @@ def run_webhook_mode():
     
     logger.info(f"🚀 تشغيل بوت هيئة المستشفى الجمهوري التعليمي...")
     logger.info(f"📍 Port: {port}")
-    logger.info(f"🤖 AI: Google Gemini 1.5 Flash")
+    logger.info(f"🤖 AI: Google Gemini 2.0 Flash Exp")
     logger.info(f"📱 Bot: @Hospitalalg_bot")
     
     app.run(host="0.0.0.0", port=port)
