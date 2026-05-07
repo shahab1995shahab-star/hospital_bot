@@ -1,7 +1,7 @@
 import os
 import logging
 from flask import Flask, request, jsonify
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
 import asyncio
@@ -14,27 +14,32 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = "8743390722:AAFT-L67uXzkipfd-C29-GOBGTHPolHFyX8"
 GEMINI_API_KEY = "AIzaSyCWDo3VlPLsTPs5b4zKNzHAmdSC8U29Rsw"
 
-# ========== تشغيل Gemini بالطريقة الجديدة ==========
+# ========== تشغيل Gemini ==========
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ========== الأيقونات ==========
 I = {
-    "doc": "👨‍⚕️", "emerg": "🚨", "hospital": "🏥", "diagnosis": "🔬",
-    "treatment": "💊", "advice": "📝", "warning": "⚠️", "loc": "📍",
-    "phone": "📞", "brain": "🧠", "steth": "🩺", "heart": "❤️", 
-    "success": "✅", "media": "📺", "facebook": "📘", "twitter": "🐦",
-    "instagram": "📷", "youtube": "🎥", "whatsapp": "💬", "telegram": "✈️"
+    "hospital": "🏥", "doctor": "👨‍⚕️", "nurse": "👩‍⚕️", "emergency": "🚨",
+    "phone": "📞", "location": "📍", "email": "📧", "clock": "🕐",
+    "stethoscope": "🩺", "brain": "🧠", "diagnosis": "🔬", "treatment": "💊",
+    "warning": "⚠️", "success": "✅", "media": "📺", "facebook": "📘",
+    "twitter": "🐦", "instagram": "📷", "youtube": "🎥", "whatsapp": "💬",
+    "telegram": "✈️", "info": "ℹ️", "question": "❓", "answer": "✅",
+    "department": "📋", "center": "🏛️", "location_pin": "📍", "calendar": "📅"
 }
 
 # ========== معلومات المستشفى ==========
 HOSPITAL = {
-    "name": "مستشفى الجمهوري التعليمي - صنعاء",
-    "address": "شارع إسماعيل هنية (الزبيري سابقاً) - أمانة العاصمة",
+    "name": "هيئة المستشفى الجمهوري التعليمي",
+    "full_name": "هيئة المستشفى الجمهوري التعليمي - أمانة العاصمة صنعاء",
+    "description": "أقدم وأكبر المستشفيات الحكومية في اليمن، يقدم خدمات طبية مجانية يومياً لمئات الآلاف من المرضى بكادر طبي مؤهل وأجهزة حديثة",
+    "beds": "500+ سرير",
+    "address": "شارع الزبيري (إسماعيل هنية سابقاً) - أمانة العاصمة صنعاء",
     "phone": "781695995",
     "complaints": "779157779",
     "email": "info@algumhorihosp-san.gov.ye",
-    "whatsapp": "http://wa.me/967734734696",
-    "beds": "650 سرير",
+    "founded": "من أقدم المستشفيات الحكومية",
+    "services": "مجانية"
 }
 
 # ========== روابط التواصل الاجتماعي ==========
@@ -50,139 +55,273 @@ SOCIAL_MEDIA = {
     "whatsapp_direct": "http://wa.me/967734734696"
 }
 
-# ========== الأقسام الطبية ==========
-DEPARTMENTS = ["الباطنية", "الجراحة العامة", "العظام والمفاصل", "الأطفال", "الطوارئ", "العيون", "الجلدية", "المسالك البولية", "الأنف والأذن والحنجرة"]
-
-# ========== الكوادر الطبية ==========
-DOCTORS = {
-    "رئيس الهيئة": "أ.د. محمد طاهر جحاف",
-    "نائب رئيس الهيئة": "د. عمار قداري",
-    "رئيس قسم العظام": "د/معتز الصنوي",
-    "رئيس قسم الجراحة": "د/عبدالله الاشول",
-    "رئيس قسم الباطنية": "د/عبد الواسع مجاهد",
+# ========== الأسئلة الشائعة (FAQ) ==========
+FAQ = {
+    "ما هو المستشفى الجمهوري التعليمي؟": f"{I['hospital']} *المستشفى الجمهوري التعليمي*\n\n{HOSPITAL['description']}\n\n• السعة السريرية: {HOSPITAL['beds']}\n• الخدمات: {HOSPITAL['services']}\n• الموقع: {HOSPITAL['address']}",
+    
+    "من هو رئيس هيئة المستشفى؟": f"{I['doctor']} *رئيس هيئة المستشفى*\n\n👨‍⚕️ *أ.د. محمد طاهر جحاف*\n📌 استشاري العظام والمفاصل",
+    
+    "من هم نواب رئيس الهيئة؟": f"{I['doctor']} *نواب رئيس الهيئة*\n\n• د. عمار قداري - للشؤون الفنية\n• د. نبيل الحاج - للشؤون السريرية\n• أ.د. محمد البعداني - للشؤون الأكاديمية",
+    
+    "ما هي الأقسام الطبية؟": f"{I['department']} *الأقسام الطبية*\n\n• قسم الجراحة العامة\n• قسم العظام والمفاصل\n• قسم الباطنية\n• قسم الأطفال والحضانة\n• قسم العناية المركزة\n• قسم الأنف والأذن والحنجرة\n• قسم الأمراض الجلدية\n• قسم جراحة المخ والأعصاب\n• قسم جراحة المسالك البولية\n• قسم جراحة الوجه والفكين",
+    
+    "ما هي المراكز الطبية؟": f"{I['center']} *المراكز الطبية المتخصصة*\n\n• مركز الحروق والتجميل\n• مركز الكبد والجهاز الهضمي\n• مركز الأمومة والطفولة\n• مركز طب وجراحة العيون\n• مركز الغسيل الكلوي\n• مركز الحميات\n• مركز الطوارئ العامة\n• مركز العلاج الطبيعي والإبر الصينية",
+    
+    "هل الخدمات مجانية؟": f"{I['success']} *الخدمات المجانية*\n\nنعم، يقدم المستشفى خدماته الطبية *مجاناً* للمرضى في معظم الأقسام.\n\n{ I['warning'] } بعض الخدمات المتخصصة قد تتطلب رسوماً رمزية.",
+    
+    "أين يقع المستشفى؟": f"{I['location_pin']} *موقع المستشفى*\n\n📍 {HOSPITAL['address']}\n\nوسط العاصمة صنعاء - يسهل الوصول إليه",
+    
+    "كيف يمكن التواصل؟": f"{I['phone']} *طرق التواصل*\n\n📞 هاتف: {HOSPITAL['phone']}\n📞 للشكاوى: {HOSPITAL['complaints']}\n📧 البريد الإلكتروني: {HOSPITAL['email']}",
+    
+    "هل توجد عيادات خارجية؟": f"{I['clock']} *العيادات الخارجية*\n\nنعم، يوجد قسم خاص بالعيادات الخارجية بإدارة مختصة لتقديم الخدمات اليومية للمرضى.\n\n🕐 أوقات العمل: السبت - الأربعاء (8ص - 2م)"
 }
 
-# ========== دالة التحليل الطبي الذكي (بالطريقة الجديدة) ==========
-async def medical_analysis(symptoms):
-    """تحليل الأعراض وتقديم استشارة طبية"""
-    try:
-        prompt = f"""أنت استشاري طبي في {HOSPITAL['name']}. الأعراض: {symptoms}
-
-رد بهذا التنسيق بالضبط مع الأيقونات:
-
-{I['steth']} *الاستشارة الطبية*
-
-{I['brain']} *تحليل الأعراض:*
-[اكتب تحليلاً دقيقاً للأعراض]
-
-{I['diagnosis']} *التشخيص المبدئي:*
-• [الاحتمال الأول]
-• [الاحتمال الثاني]
-
-{I['treatment']} *العلاج والنصائح:*
-• [نصيحة 1]
-• [نصيحة 2]
-
-{I['hospital']} *القسم المناسب:*
-[اسم القسم من: {', '.join(DEPARTMENTS)}]
-
-{I['warning']} *هذا تشخيص أولي، استشر الطبيب المختص*
-
-📞 للطوارئ: {HOSPITAL['phone']}"""
-        
-        # استخدام الطريقة الجديدة
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt
-        )
-        return response.text if response else None
-    except Exception as e:
-        logger.error(f"خطأ في Gemini: {e}")
-        return None
-
-# ========== دوال البوت (نفسها بدون تغيير) ==========
+# ========== دوال البوت ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """رسالة الترحيب والقائمة الرئيسية"""
     keyboard = [
-        [KeyboardButton(f"{I['steth']} استشارة طبية")],
-        [KeyboardButton(f"{I['hospital']} المستشفى"), KeyboardButton(f"{I['doc']} الكوادر")],
-        [KeyboardButton(f"{I['emerg']} طوارئ"), KeyboardButton(f"{I['phone']} التواصل")],
-        [KeyboardButton(f"{I['loc']} الموقع"), KeyboardButton(f"{I['heart']} الأقسام")],
-        [KeyboardButton(f"{I['media']} المركز الإعلامي"), KeyboardButton(f"{I['whatsapp']} واتساب مباشر")]
+        [KeyboardButton(f"{I['stethoscope']} استشارة طبية"), KeyboardButton(f"{I['question']} الأسئلة الشائعة")],
+        [KeyboardButton(f"{I['hospital']} معلومات المستشفى"), KeyboardButton(f"{I['doctor']} الكوادر الطبية")],
+        [KeyboardButton(f"{I['department']} الأقسام"), KeyboardButton(f"{I['center']} المراكز")],
+        [KeyboardButton(f"{I['emergency']} طوارئ"), KeyboardButton(f"{I['phone']} التواصل")],
+        [KeyboardButton(f"{I['location']} الموقع"), KeyboardButton(f"{I['media']} المركز الإعلامي")],
+        [KeyboardButton(f"{I['whatsapp']} واتساب مباشر")]
     ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
+    welcome_text = f"""
+🏥 *{HOSPITAL['full_name']}* 🏥
+
+{ I['info'] } *مرحباً بك في البوت الرسمي لهيئة المستشفى الجمهوري التعليمي*
+
+{ I['stethoscope'] } *بوت طبي ذكي بالذكاء الاصطناعي Gemini*
+
+{ I['success'] } *الخدمات التي نقدمها:*
+• 🔬 تحليل دقيق للأعراض الطبية
+• 💊 تشخيص مبدئي وعلاجات ونصائح
+• 🏥 توجيه للقسم الطبي المناسب
+• 📋 معلومات شاملة عن المستشفى
+• 👨‍⚕️ الكوادر الطبية والأقسام
+• 📺 المركز الإعلامي ووسائل التواصل
+
+{ I['emergency'] } *للطوارئ:* `{HOSPITAL['phone']}`
+
+📝 *اكتب أعراضك أو اختر من القائمة أدناه*
+
+{ I['warning'] } *تنبيه:* هذا البوت يقدم استشارات أولية وليس بديلاً عن زيارة الطبيب المختص
+"""
+    await update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=reply_markup)
+
+async def hospital_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معلومات شاملة عن المستشفى"""
+    text = f"""
+{I['hospital']} *{HOSPITAL['full_name']}* {I['hospital']}
+
+📖 *نبذة تعريفية:*
+{HOSPITAL['description']}
+
+📊 *إحصائيات:*
+• 🛏️ السعة السريرية: {HOSPITAL['beds']}
+• 💉 الخدمات: {HOSPITAL['services']}
+• 📅 التأسيس: {HOSPITAL['founded']}
+
+📍 *العنوان:*
+{HOSPITAL['address']}
+
+📞 *للتواصل:*
+{ HOSPITAL['phone'] }
+
+⚕️ *الرؤية:* الريادة في تقديم الخدمات الصحية المجانية على مستوى الجمهورية اليمنية
+
+💝 *الرسالة:* تقديم خدمات صحية مجانية بجودة عالية عبر كادر مؤهل خبير
+"""
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def doctors_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """الكوادر الطبية"""
+    text = f"""
+{I['doctor']} *الكوادر الطبية الرئيسية* {I['doctor']}
+
+👨‍⚕️ *رئيس الهيئة:*
+• أ.د. محمد طاهر جحاف - استشاري العظام والمفاصل
+
+👨‍⚕️ *نواب رئيس الهيئة:*
+• د. عمار قداري - الشؤون الفنية
+• د. نبيل الحاج - الشؤون السريرية
+• أ.د. محمد البعداني - الشؤون الأكاديمية
+
+👨‍⚕️ *رؤساء الأقسام:*
+• د/سمير العريقي - جراحة المخ والأعصاب
+• د/معتز الصنوي - قسم العظام
+• د/عبدالله الاشول - الجراحة العامة
+• د/زين العابدين جروش - المسالك البولية
+• د/عبد الواسع مجاهد - الباطنية
+• د/ناشر الاغبري - الأطفال والحضانة
+
+{I['info']} *للاستفسار عن مواعيد الأطباء:* 📞 {HOSPITAL['phone']}
+"""
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def departments_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """الأقسام الطبية"""
+    text = f"""
+{I['department']} *الأقسام الطبية في المستشفى* {I['department']}
+
+🏥 *الأقسام الرئيسية:*
+
+• 🔪 الجراحة العامة
+• 🦴 العظام والمفاصل
+• 🫀 الباطنية
+• 👶 الأطفال والحضانة
+• 💓 العناية المركزة (ICU)
+• 👂 الأنف والأذن والحنجرة
+• 🩹 الأمراض الجلدية
+• 🧠 جراحة المخ والأعصاب
+• 💧 جراحة المسالك البولية
+• 😷 جراحة الوجه والفكين
+• 👁️ طب وجراحة العيون
+• 🚨 الطوارئ العامة
+
+📞 *للاستفسار:* {HOSPITAL['phone']}
+"""
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def centers_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """المراكز الطبية المتخصصة"""
+    text = f"""
+{I['center']} *المراكز الطبية المتخصصة* {I['center']}
+
+• 🔥 مركز الحروق والتجميل
+• 🫀 مركز الكبد والجهاز الهضمي
+• 🤱 مركز الأمومة والطفولة
+• 👁️ مركز طب وجراحة العيون
+• 💊 مركز الغسيل الكلوي
+• 🦠 مركز الحميات
+• 🚑 مركز الطوارئ العامة
+• 💆 مركز العلاج الطبيعي والإبر الصينية
+• 🦷 مركز طب الأسنان الاستشاري
+• 🔬 مركز الوسائل التشخيصية
+
+{I['info']} *جميع المراكز تقدم خدماتها مجاناً للمواطنين*
+"""
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def emergency(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """حالات الطوارئ"""
+    text = f"""
+{I['emergency']} *حالة طارئة - تعليمات مهمة* {I['emergency']}
+
+⚠️ *إذا كنت تعاني من أحد الأعراض التالية:*
+
+• ألم شديد في الصدر يمتد للذراع
+• صعوبة شديدة في التنفس
+• فقدان الوعي أو الإغماء
+• نزيف حاد غير متوقف
+• شلل مفاجئ في نصف الجسم
+• كلام غير مفهوم فجأة
+• حروق من الدرجة الثالثة
+
+🚨 *اتصل فوراً على الطوارئ:* `{HOSPITAL['phone']}`
+
+📍 *العنوان:* {HOSPITAL['address']}
+
+🩺 *لا تنتظر - اذهب لأقرب قسم طوارئ فوراً*
+
+{ I['warning'] } *هذه الحالة تستدعي تدخلاً طبياً عاجلاً*
+"""
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def contact_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معلومات التواصل"""
+    text = f"""
+{I['phone']} *طرق التواصل مع المستشفى* {I['phone']}
+
+📞 *الرقم الرئيسي:* `{HOSPITAL['phone']}`
+📞 *الشكاوى والاقتراحات:* `{HOSPITAL['complaints']}`
+📧 *البريد الإلكتروني:* `{HOSPITAL['email']}`
+
+💬 *واتساب مباشر:* [اضغط هنا للتواصل]({SOCIAL_MEDIA['whatsapp_direct']})
+
+🕐 *أوقات الاتصال:*
+• الطوارئ: 24 ساعة
+• الاستفسارات العامة: 8ص - 8م
+• الشكاوى: 9ص - 3م
+
+{I['success']} *فريقنا يخدمك على مدار الساعة*
+"""
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def location_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """موقع المستشفى"""
+    text = f"""
+{I['location_pin']} *موقع هيئة المستشفى الجمهوري التعليمي* {I['location_pin']}
+
+📍 *العنوان التفصيلي:*
+{HOSPITAL['address']}
+
+🗺️ *معالم قريبة:*
+• يقع في وسط العاصمة صنعاء
+• قريب من كلية الطب
+• يمكن الوصول إليه بسهولة عبر وسائل النقل
+
+🚗 *كيف تصل؟*
+يمكن استخدام تطبيقات الخرائط للوصول إلى المستشفى
+
+📞 *للاستفسار عن الاتجاهات:* {HOSPITAL['phone']}
+"""
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+async def faq_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """عرض قائمة الأسئلة الشائعة"""
+    keyboard = []
+    for question in FAQ.keys():
+        keyboard.append([InlineKeyboardButton(f"{I['question']} {question}", callback_data=f"faq_{question}")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
-        f"{I['hospital']} *{HOSPITAL['name']}*\n\n"
-        f"{I['brain']} *بوت طبي ذكي بالذكاء الاصطناعي*\n\n"
-        f"{I['success']} أقدم لك:\n"
-        f"• تحليل دقيق للأعراض\n"
-        f"• تشخيص مبدئي\n"
-        f"• علاجات ونصائح\n"
-        f"• توجيه للقسم المناسب\n\n"
-        f"{I['media']} تابع المركز الإعلامي على وسائل التواصل\n\n"
-        f"{I['emerg']} *للطوارئ:* {HOSPITAL['phone']}\n\n"
-        f"*اكتب أعراضك أو اختر من القائمة*",
+        f"{I['question']} *الأسئلة الشائعة* {I['question']}\n\n"
+        f"اختر سؤالك من القائمة أدناه:",
         parse_mode="Markdown",
         reply_markup=reply_markup
     )
 
-async def hospital_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = f"""{I['hospital']} *{HOSPITAL['name']}*
-
-{I['loc']} {HOSPITAL['address']}
-{I['phone']} {HOSPITAL['phone']}
-{I['phone']} للشكاوى: {HOSPITAL['complaints']}
-{I['heart']} السعة: {HOSPITAL['beds']} سرير
-
-*الخدمات:* مجانية بالكامل
-*الطوارئ:* 24 ساعة"""
-    await update.message.reply_text(text, parse_mode="Markdown")
-
-async def doctors_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    docs = "\n".join([f"• *{title}:* {name}" for title, name in DOCTORS.items()])
-    text = f"{I['doc']} *الكوادر الطبية الرئيسية*\n\n{docs}\n\n📞 للاستفسار: {HOSPITAL['phone']}"
-    await update.message.reply_text(text, parse_mode="Markdown")
-
-async def emergency(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = f"""{I['emerg']} *حالة طارئه* {I['emerg']}
-
-*اتصل فوراً:*
-📞 {HOSPITAL['phone']}
-📍 {HOSPITAL['address']}
-
-{I['warning']} لا تنتظر، اذهب لأقرب طوارئ"""
-    await update.message.reply_text(text, parse_mode="Markdown")
-
-async def contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = f"""{I['phone']} *أرقام التواصل*
-
-للاستفسار: {HOSPITAL['phone']}
-للشكاوى: {HOSPITAL['complaints']}
-📧 {HOSPITAL['email']}"""
-    await update.message.reply_text(text, parse_mode="Markdown")
-
-async def location(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = f"{I['loc']} *الموقع*\n\n{HOSPITAL['address']}\n\nوسط العاصمة صنعاء - يسهل الوصول إليه"
-    await update.message.reply_text(text, parse_mode="Markdown")
-
-async def departments_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    depts = "\n".join([f"• {dept}" for dept in DEPARTMENTS])
-    text = f"{I['hospital']} *الأقسام الطبية*\n\n{depts}"
-    await update.message.reply_text(text, parse_mode="Markdown")
+async def faq_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة الضغط على سؤال من الأسئلة الشائعة"""
+    query = update.callback_query
+    await query.answer()
+    
+    question = query.data.replace("faq_", "")
+    answer = FAQ.get(question, "عذراً، لم يتم العثور على إجابة لهذا السؤال.")
+    
+    await query.edit_message_text(
+        f"{I['answer']} *{question}*\n\n{answer}\n\n"
+        f"{I['info']} للعودة إلى الأسئلة الشائعة، استخدم الأمر /faq",
+        parse_mode="Markdown"
+    )
 
 async def consultation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """بدء استشارة طبية"""
     await update.message.reply_text(
-        f"{I['steth']} *استشارة طبية فورية*\n\n"
-        f"اكتب أعراضك بالتفصيل (متى بدأت، شدتها، مكانها)\n\n"
-        f"📝 *مثال:* 'عندي ألم في الصدر من 3 أيام، يزداد مع الحركة'\n\n"
-        f"{I['brain']} سأقوم بتحليلها وتقديم استشارة لك",
+        f"{I['stethoscope']} *استشارة طبية فورية بالذكاء الاصطناعي* {I['stethoscope']}\n\n"
+        f"📝 *اكتب أعراضك بالتفصيل:*\n"
+        f"• متى بدأت الأعراض؟\n"
+        f"• ما هي شدتها؟\n"
+        f"• أين مكان الألم؟\n"
+        f"• هل هناك أعراض مصاحبة؟\n\n"
+        f"📝 *مثال:*\n"
+        f"'عندي ألم في الصدر من 3 أيام، يزداد مع الحركة، وعندي ضغط وسكر'\n\n"
+        f"{I['brain']} *سأقوم بتحليل أعراضك وتقديم استشارة طبية أولية*\n\n"
+        f"{I['warning']} *تنبيه:* هذا تشخيص أولي وليس بديلاً عن استشارة الطبيب المختص",
         parse_mode="Markdown"
     )
 
 async def media_center(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = f"""{I['media']} *المركز الإعلامي - هيئة المستشفى الجمهوري التعليمي* {I['media']}
+    """المركز الإعلامي"""
+    text = f"""
+{I['media']} *المركز الإعلامي - هيئة المستشفى الجمهوري التعليمي* {I['media']}
 
-تابعونا على جميع وسائل التواصل الاجتماعي:
+📺 *تابعونا على جميع وسائل التواصل الاجتماعي:*
 
 {I['telegram']} *تلغرام:* [ALGUMHORI]({SOCIAL_MEDIA['telegram']})
 
@@ -201,52 +340,108 @@ async def media_center(update: Update, context: ContextTypes.DEFAULT_TYPE):
 💬 *واتساب مباشر:* [اضغط هنا للتواصل]({SOCIAL_MEDIA['whatsapp_direct']})
 
 ---
-📞 للطوارئ: {HOSPITAL['phone']}
-📍 {HOSPITAL['address']}"""
-    
+📞 *للاستفسار:* {HOSPITAL['phone']}
+📍 *العنوان:* {HOSPITAL['address']}
+"""
     await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
 
 async def whatsapp_direct(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = f"""{I['whatsapp']} *تواصل مباشر عبر الواتساب* {I['whatsapp']}
+    """واتساب مباشر"""
+    text = f"""
+{I['whatsapp']} *تواصل مباشر عبر الواتساب* {I['whatsapp']}
 
-اضغط على الرابط أدناه للتواصل المباشر مع فريق المستشفى عبر الواتساب:
+📱 *للتواصل المباشر مع فريق المستشفى:*
 
-📱 [تواصل الآن عبر الواتساب]({SOCIAL_MEDIA['whatsapp_direct']})
+[اضغط هنا للتواصل عبر الواتساب]({SOCIAL_MEDIA['whatsapp_direct']})
 
-يمكنك استخدام هذه الخدمة لـ:
-• حجز المواعيد
-• الاستفسار عن الخدمات
-• تقديم الملاحظات والاقتراحات
+💬 *يمكنك استخدام هذه الخدمة لـ:*
+• ✅ حجز المواعيد
+• ✅ الاستفسار عن الخدمات
+• ✅ تقديم الملاحظات والاقتراحات
+• ✅ الاستعلام عن نتائج التحاليل
+• ✅ متابعة الحالات المرضية
 
-📞 أو اتصل على: {HOSPITAL['phone']}"""
-    
+📞 *أو اتصل على:* {HOSPITAL['phone']}
+
+🕐 *أوقات الرد على الواتساب:* 9ص - 5م (السبت - الأربعاء)
+"""
     await update.message.reply_text(text, parse_mode="Markdown")
 
+async def medical_analysis(symptoms):
+    """تحليل الأعراض باستخدام Gemini AI"""
+    try:
+        prompt = f"""أنت استشاري طبي متخصص في {HOSPITAL['name']}.
+
+الأعراض التي يشكو منها المريض: {symptoms}
+
+قم بتحليل هذه الأعراض وتقديم استشارة طبية أولية بهذا التنسيق بالضبط:
+
+🩺 *الاستشارة الطبية*
+
+🧠 *تحليل الأعراض:*
+[اكتب تحليلاً دقيقاً وواضحاً للأعراض المذكورة]
+
+🔬 *التشخيص المبدئي (احتمالات):*
+• [الاحتمال الأول]
+• [الاحتمال الثاني]
+
+💊 *العلاج والنصائح الأولية:*
+• [نصيحة عملية 1]
+• [نصيحة عملية 2]
+
+🏥 *القسم الطبي المناسب للمراجعة:*
+[اسم القسم من الأقسام التالية: الجراحة العامة، العظام، الباطنية، الأطفال، الأنف والأذن والحنجرة، الجلدية، المسالك البولية، العيون، الطوارئ]
+
+⚠️ *هذا تشخيص أولي وليس بديلاً عن استشارة الطبيب المختص*
+
+📞 للطوارئ: {HOSPITAL['phone']}
+📍 {HOSPITAL['address']}
+
+ملاحظة: كن دقيقاً ومهنياً، استخدم اللغة العربية الفصحى المبسطة."""
+        
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
+        return response.text if response else None
+    except Exception as e:
+        logger.error(f"خطأ في Gemini: {e}")
+        return None
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة الرسائل النصية"""
     msg = update.message.text
     
-    # معالجة الأزرار
-    if msg == f"{I['steth']} استشارة طبية":
+    # معالجة الأزرار الرئيسية
+    if msg == f"{I['stethoscope']} استشارة طبية":
         await consultation(update, context)
-    elif msg == f"{I['hospital']} المستشفى":
+    elif msg == f"{I['question']} الأسئلة الشائعة":
+        await faq_list(update, context)
+    elif msg == f"{I['hospital']} معلومات المستشفى":
         await hospital_info(update, context)
-    elif msg == f"{I['doc']} الكوادر":
+    elif msg == f"{I['doctor']} الكوادر الطبية":
         await doctors_info(update, context)
-    elif msg == f"{I['emerg']} طوارئ":
+    elif msg == f"{I['department']} الأقسام":
+        await departments_info(update, context)
+    elif msg == f"{I['center']} المراكز":
+        await centers_info(update, context)
+    elif msg == f"{I['emergency']} طوارئ":
         await emergency(update, context)
     elif msg == f"{I['phone']} التواصل":
-        await contact(update, context)
-    elif msg == f"{I['loc']} الموقع":
-        await location(update, context)
-    elif msg == f"{I['heart']} الأقسام":
-        await departments_info(update, context)
+        await contact_info(update, context)
+    elif msg == f"{I['location']} الموقع":
+        await location_info(update, context)
     elif msg == f"{I['media']} المركز الإعلامي":
         await media_center(update, context)
     elif msg == f"{I['whatsapp']} واتساب مباشر":
         await whatsapp_direct(update, context)
     else:
         # استشارة طبية ذكية
-        thinking = await update.message.reply_text(f"{I['brain']} جاري تحليل الأعراض وتجهيز الاستشارة...")
+        thinking = await update.message.reply_text(
+            f"{I['brain']} *جاري تحليل أعراضك وتجهيز الاستشارة الطبية...*\n\n"
+            f"🩺 يرجى الانتظار لحظات",
+            parse_mode="Markdown"
+        )
         
         response = await medical_analysis(msg)
         
@@ -254,10 +449,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await thinking.edit_text(response, parse_mode="Markdown")
         else:
             await thinking.edit_text(
-                f"{I['warning']} *عذراً، خدمة الذكاء الاصطناعي غير متاحة حالياً*\n\n"
-                f"الرجاء المحاولة مرة أخرى أو الاتصال على:\n"
-                f"📞 {HOSPITAL['phone']}\n\n"
-                f"يمكنك استخدام الأزرار الأخرى للحصول على المعلومات",
+                f"{I['warning']} *عذراً، حدث خطأ في خدمة الذكاء الاصطناعي*\n\n"
+                f"الرجاء المحاولة مرة أخرى أو استخدام الأزرار للحصول على المعلومات.\n\n"
+                f"📞 *للاستفسار المباشر:* {HOSPITAL['phone']}\n\n"
+                f"💡 *نصيحة:* حاول كتابة الأعراض بشكل أوضح مع التفاصيل (المكان، المدة، الشدة)",
                 parse_mode="Markdown"
             )
 
@@ -269,6 +464,8 @@ telegram_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 # إضافة المعالجات
 telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("faq", faq_list))
+telegram_app.add_handler(CallbackQueryHandler(faq_callback, pattern="^faq_"))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 @app.route('/')
@@ -276,8 +473,10 @@ def home():
     return jsonify({
         "status": "✅ البوت الطبي الذكي شغال",
         "bot": "@Hospitalalg_bot",
-        "version": "Golden Edition with Media Center",
-        "ai": "Gemini 1.5 Flash"
+        "name": "هيئة المستشفى الجمهوري التعليمي",
+        "version": "Golden Edition v2.0",
+        "ai": "Gemini 1.5 Flash",
+        "features": ["استشارات طبية", "أسئلة شائعة", "معلومات المستشفى", "الكوادر الطبية", "المركز الإعلامي"]
     })
 
 @app.route('/webhook', methods=['POST'])
@@ -303,10 +502,11 @@ def run_webhook_mode():
     """تشغيل وضع Webhook"""
     port = int(os.environ.get("PORT", 8080))
     
-    logger.info(f"🚀 تشغيل البوت الطبي الذكي...")
+    logger.info(f"🚀 تشغيل بوت هيئة المستشفى الجمهوري التعليمي...")
     logger.info(f"📍 Port: {port}")
+    logger.info(f"🤖 AI: Google Gemini 1.5 Flash")
+    logger.info(f"📱 Bot: @Hospitalalg_bot")
     
-    # تشغيل Flask
     app.run(host="0.0.0.0", port=port)
 
 if __name__ == '__main__':
